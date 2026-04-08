@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Load Balancing LLM Models with agentgateway | Solo.io</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700;800;900&family=DM+Sans:wght@300;400;500;600;700;800;900&family=DM+Mono:wght@400;500&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --bg: #FFFFFF;
+    --bg-soft: #EDEEF7;
+    --bg-card: #FFFFFF;
+    --bg-code: #EDEEF7;
+    --accent-purple: #8023C3;
+    --accent-purple-light: #CC85FF;
+    --accent-blue: #20B7F3;
+    --accent-cyan: #20B7F3;
+    --accent-green: #1FEEB3;
+    --accent-orange: #FF804E;
+    --accent-red: #FF4D4F;
+    --accent-pink: #CC85FF;
+    --text-primary: #151927;
+    --text-secondary: #5C6178;
+    --text-muted: #9DA1BD;
+    --border: #DDDFED;
+    --border-light: #EDEEF7;
+    --shadow-sm: 0 1px 3px rgba(21,25,39,0.06), 0 1px 2px rgba(21,25,39,0.04);
+    --shadow-md: 0 4px 12px rgba(21,25,39,0.08), 0 2px 4px rgba(21,25,39,0.04);
+    --shadow-lg: 0 10px 30px rgba(21,25,39,0.1), 0 4px 8px rgba(21,25,39,0.06);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 60px 80px;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+    overflow-y: auto;
+    background: var(--bg);
+  }
+
+  .slide.active {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: all;
+  }
+
+  /* Decorative elements */
+  .bg-dots {
+    position: fixed;
+    inset: 0;
+    background-image: radial-gradient(circle, #DDDFED 1px, transparent 1px);
+    background-size: 32px 32px;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.5;
+  }
+
+  .corner-accent {
+    position: absolute;
+    width: 300px;
+    height: 300px;
+    border-radius: 50%;
+    filter: blur(100px);
+    opacity: 0.12;
+    pointer-events: none;
+  }
+
+  .corner-accent.tr { top: -100px; right: -100px; background: #8023C3; }
+  .corner-accent.bl { bottom: -100px; left: -100px; background: #20B7F3; }
+
+  /* Typography */
+  .slide-label {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #8023C3;
+    margin-bottom: 16px;
+  }
+
+  h1 {
+    font-family: 'Figtree', sans-serif;
+    font-size: 64px;
+    font-weight: 900;
+    line-height: 1.05;
+    letter-spacing: -2.5px;
+    max-width: 900px;
+    text-align: center;
+    color: var(--text-primary);
+  }
+
+  h2 {
+    font-family: 'Figtree', sans-serif;
+    font-size: 48px;
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -1.5px;
+    max-width: 850px;
+    text-align: center;
+    color: var(--text-primary);
+  }
+
+  h3 {
+    font-family: 'Figtree', sans-serif;
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.5px;
+    color: var(--text-primary);
+  }
+
+  .subtitle {
+    font-size: 22px;
+    font-weight: 400;
+    color: var(--text-secondary);
+    margin-top: 20px;
+    max-width: 700px;
+    text-align: center;
+    line-height: 1.5;
+  }
+
+  .gradient-text {
+    background: linear-gradient(135deg, #8023C3, #20B7F3);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .gradient-green {
+    background: linear-gradient(135deg, #0d9b6e, #1a8fc2);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .gradient-orange {
+    background: linear-gradient(135deg, #FF804E, #FF4D4F);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .gradient-purple {
+    background: linear-gradient(135deg, #8023C3, #CC85FF);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Cards */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    position: relative;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.2s ease;
+  }
+
+  .card:hover { box-shadow: var(--shadow-md); }
+
+  .card.accent-top::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 24px; right: 24px;
+    height: 3px;
+    border-radius: 0 0 3px 3px;
+  }
+
+  .card.accent-purple::before { background: var(--accent-purple); }
+  .card.accent-cyan::before { background: var(--accent-cyan); }
+  .card.accent-green::before { background: var(--accent-green); }
+  .card.accent-blue::before { background: var(--accent-blue); }
+  .card.accent-orange::before { background: var(--accent-orange); }
+  .card.accent-red::before { background: var(--accent-red); }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: 100%; max-width: 1100px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; width: 100%; max-width: 1200px; }
+  .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 20px; width: 100%; max-width: 1200px; }
+
+  /* Code Blocks */
+  .code-block {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 28px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 15px;
+    line-height: 1.7;
+    overflow-x: auto;
+    max-width: 1000px;
+    width: 100%;
+    position: relative;
+    white-space: pre;
+    color: var(--text-primary);
+  }
+
+  .code-block .lang-tag {
+    position: absolute;
+    top: 10px; right: 14px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .code-keyword { color: #8023C3; }
+  .code-string { color: #0d9b6e; }
+  .code-comment { color: var(--text-muted); font-style: italic; }
+  .code-type { color: #1a8fc2; }
+  .code-field { color: #5044E9; }
+  .code-value { color: #d96435; }
+
+  /* Flow / Diagram */
+  .flow-node {
+    background: var(--bg-card);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 24px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 14px;
+    min-width: 140px;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .flow-node.hl-purple { border-color: #8023C3; background: rgba(128,35,195,0.05); }
+  .flow-node.hl-cyan { border-color: #20B7F3; background: rgba(32,183,243,0.05); }
+  .flow-node.hl-green { border-color: #0d9b6e; background: rgba(31,238,179,0.05); }
+  .flow-node.hl-orange { border-color: #FF804E; background: rgba(255,128,78,0.05); }
+  .flow-node.hl-blue { border-color: #20B7F3; background: rgba(32,183,243,0.05); }
+
+  .flow-arrow { font-size: 28px; color: var(--text-muted); text-align: center; width: 100%; margin: 4px 0; }
+
+  /* Icon Badges */
+  .icon-badge {
+    width: 52px; height: 52px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    margin-bottom: 16px;
+    flex-shrink: 0;
+  }
+
+  .icon-badge.purple { background: rgba(128,35,195,0.1); }
+  .icon-badge.blue { background: rgba(32,183,243,0.1); }
+  .icon-badge.cyan { background: rgba(32,183,243,0.1); }
+  .icon-badge.green { background: rgba(31,238,179,0.12); }
+  .icon-badge.orange { background: rgba(255,128,78,0.1); }
+  .icon-badge.red { background: rgba(255,77,79,0.1); }
+
+  /* Tags */
+  .tag {
+    display: inline-block;
+    padding: 5px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  .tag-purple { background: rgba(128,35,195,0.08); color: #8023C3; }
+  .tag-blue { background: rgba(32,183,243,0.08); color: #1a8fc2; }
+  .tag-cyan { background: rgba(32,183,243,0.08); color: #1a8fc2; }
+  .tag-green { background: rgba(31,238,179,0.1); color: #0d9b6e; }
+  .tag-orange { background: rgba(255,128,78,0.08); color: #d96435; }
+  .tag-red { background: rgba(255,77,79,0.08); color: #e03e40; }
+
+  /* Bullets */
+  .point { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px; }
+  .point-marker { width: 8px; height: 8px; border-radius: 50%; margin-top: 9px; flex-shrink: 0; }
+  .point-marker.purple { background: #8023C3; }
+  .point-marker.blue { background: #20B7F3; }
+  .point-marker.cyan { background: #20B7F3; }
+  .point-marker.green { background: #0d9b6e; }
+  .point-marker.orange { background: #FF804E; }
+  .point-text { font-size: 18px; line-height: 1.5; color: var(--text-secondary); }
+  .point-text strong { color: var(--text-primary); font-weight: 600; }
+
+  /* Quote */
+  .quote-block {
+    border-left: 4px solid var(--accent-purple);
+    padding: 24px 32px;
+    background: rgba(148,45,231,0.03);
+    border-radius: 0 12px 12px 0;
+    max-width: 800px;
+    font-size: 22px;
+    font-weight: 400;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    font-style: italic;
+  }
+
+  /* Table */
+  .compare-table {
+    width: 100%; max-width: 900px;
+    border-collapse: separate;
+    border-spacing: 0;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .compare-table th {
+    background: var(--bg-soft);
+    padding: 16px 24px;
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    text-align: left;
+  }
+
+  .compare-table td {
+    padding: 14px 24px;
+    border-top: 1px solid var(--border-light);
+    font-size: 15px;
+    color: var(--text-secondary);
+    background: var(--bg-card);
+  }
+
+  .compare-table tr:hover td { background: rgba(148,45,231,0.02); }
+
+  /* Misc */
+  .mt-24 { margin-top: 24px; }
+  .mt-32 { margin-top: 32px; }
+  .mt-40 { margin-top: 40px; }
+
+  .highlight-box {
+    background: rgba(148,45,231,0.04);
+    border: 1px solid rgba(148,45,231,0.12);
+    border-radius: 12px;
+    padding: 20px 28px;
+    max-width: 800px;
+    text-align: center;
+  }
+
+  .highlight-box.green { background: rgba(5,150,105,0.04); border-color: rgba(5,150,105,0.12); }
+  .highlight-box.blue { background: rgba(37,99,235,0.04); border-color: rgba(37,99,235,0.12); }
+  .highlight-box.orange { background: rgba(217,119,6,0.04); border-color: rgba(217,119,6,0.12); }
+
+  .arch-stack { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; max-width: 700px; }
+  .arch-layer {
+    width: 100%; padding: 18px 32px;
+    border-radius: 12px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 16px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+    background: var(--bg-card);
+  }
+  .arch-connector { width: 2px; height: 16px; background: var(--border); }
+
+  .section-number {
+    font-size: 120px; font-weight: 900;
+    opacity: 0.04;
+    position: absolute;
+    top: 40px; right: 60px;
+    line-height: 1;
+    color: var(--accent-purple);
+  }
+
+  /* Progress & Nav */
+  .progress-bar {
+    position: fixed; top: 0; left: 0; height: 3px;
+    background: linear-gradient(90deg, var(--accent-purple), var(--accent-blue));
+    transition: width 0.4s ease;
+    z-index: 100;
+  }
+
+  .slide-counter {
+    position: fixed; bottom: 24px; right: 32px;
+    font-size: 14px; font-weight: 500;
+    color: var(--text-muted);
+    z-index: 100;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .nav-hint {
+    position: fixed; bottom: 24px; left: 32px;
+    font-size: 12px; color: var(--text-muted);
+    z-index: 100; opacity: 0.5;
+  }
+
+  /* Diagram specific */
+  .lb-diagram {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    width: 100%;
+    max-width: 1100px;
+  }
+
+  .lb-diagram .provider-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .score-bar {
+    height: 8px;
+    border-radius: 4px;
+    background: var(--border-light);
+    overflow: hidden;
+    margin-top: 8px;
+  }
+
+  .score-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.6s ease;
+  }
+
+  .weight-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 700;
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-dots"></div>
+<div class="progress-bar" id="progressBar"></div>
+<div class="slide-counter" id="slideCounter"></div>
+<div class="nav-hint">Arrow keys or click to navigate</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!--  SLIDE 0 — TITLE                               -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="slide active" id="slide-0">
+  <div class="corner-accent tr"></div>
+  <div class="corner-accent bl"></div>
+  <div style="margin-bottom:24px; display:flex; align-items:center; gap:12px;">
+    <img src="https://avatars.githubusercontent.com/u/26319377?s=200&v=4" alt="Solo.io" style="width:52px; height:52px; border-radius:14px; box-shadow: var(--shadow-md);" onerror="this.style.display='none'">
+    <span style="font-size:26px; font-weight:800; color:var(--text-primary); letter-spacing:-0.5px;">Solo.io</span>
+  </div>
+  <h1><span class="gradient-text">Load Balancing</span> LLM Models</h1>
+  <p class="subtitle" style="margin-top:24px;">
+    Intelligent multi-provider routing with agentgateway's Power of Two Choices algorithm
+  </p>
+  <div style="display:flex; align-items:center; justify-content:center; gap:40px; margin-top:48px;">
+    <!-- agentgateway -->
+    <div style="display:flex; flex-direction:column; align-items:center; gap:6px;">
+      <svg viewBox="0 0 1065 1065" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:96px; height:96px;"><path d="M532.86 391.221C571.684 391.221 603.157 359.871 603.157 321.198C603.157 282.526 571.684 251.176 532.86 251.176C494.036 251.176 462.562 282.526 462.562 321.198C462.562 359.871 494.036 391.221 532.86 391.221Z" fill="#8023C3"/><path d="M532.86 602.659C571.684 602.659 603.157 571.308 603.157 532.636C603.157 493.964 571.684 462.613 532.86 462.613C494.036 462.613 462.562 493.964 462.562 532.636C462.562 571.308 494.036 602.659 532.86 602.659Z" fill="#8023C3"/><path d="M573.109 426.82C573.109 401.589 580.374 377.922 592.745 357.776L532.855 321.004L472.965 357.776C485.336 377.922 492.601 401.393 492.601 426.82C492.601 452.248 485.336 475.719 472.965 495.865L532.855 532.637L592.745 495.865C580.374 475.719 573.109 452.248 573.109 426.82Z" fill="#8023C3"/><path d="M705.453 496.842C744.277 496.842 775.75 465.492 775.75 426.82C775.75 388.147 744.277 356.797 705.453 356.797C666.629 356.797 635.156 388.147 635.156 426.82C635.156 465.492 666.629 496.842 705.453 496.842Z" fill="#8023C3"/><path d="M705.453 708.28C744.277 708.28 775.75 676.93 775.75 638.257C775.75 599.585 744.277 568.234 705.453 568.234C666.629 568.234 635.156 599.585 635.156 638.257C635.156 676.93 666.629 708.28 705.453 708.28Z" fill="#8023C3"/><path d="M745.703 532.637C745.703 507.405 752.968 483.738 765.339 463.592L705.449 426.82L645.559 463.592C657.929 483.738 665.195 507.209 665.195 532.637C665.195 558.064 657.929 581.535 645.559 601.681L705.449 638.453L765.339 601.681C752.968 581.535 745.703 558.064 745.703 532.637Z" fill="#8023C3"/><path d="M360.059 496.842C398.883 496.842 430.356 465.492 430.356 426.82C430.356 388.147 398.883 356.797 360.059 356.797C321.235 356.797 289.762 388.147 289.762 426.82C289.762 465.492 321.235 496.842 360.059 496.842Z" fill="#8023C3"/><path d="M360.059 708.278C398.883 708.278 430.356 676.928 430.356 638.255C430.356 599.583 398.883 568.232 360.059 568.232C321.235 568.232 289.762 599.583 289.762 638.255C289.762 676.928 321.235 708.278 360.059 708.278Z" fill="#8023C3"/><path d="M400.308 532.635C400.308 507.403 407.573 483.736 419.944 463.59L360.054 426.818L300.164 463.59C312.535 483.736 319.8 507.208 319.8 532.635C319.8 558.062 312.535 581.533 300.164 601.679L360.054 638.451L419.944 601.679C407.573 581.533 400.308 558.062 400.308 532.635Z" fill="#8023C3"/><path d="M532.86 813.901C571.684 813.901 603.157 782.551 603.157 743.878C603.157 705.206 571.684 673.855 532.86 673.855C494.036 673.855 462.562 705.206 462.562 743.878C462.562 782.551 494.036 813.901 532.86 813.901Z" fill="#8023C3"/></svg>
+      <span style="font-size:18px; font-weight:700; color:#8023C3; letter-spacing:-0.3px;">agentgateway</span>
+    </div>
+  </div>
+  <!-- Presenter -->
+  <div style="margin-top:44px; display:flex; align-items:center; gap:16px; background:var(--bg-soft); padding:14px 28px 14px 16px; border-radius:60px; border:1px solid var(--border-light);">
+    <img id="presenter-photo" src="https://avatars.slack-edge.com/2025-10-06/9657562592417_817475aae09174e64d56_512.jpg" alt="Sebastian Maniak" style="width:56px; height:56px; border-radius:50%; object-fit:cover; border:2.5px solid var(--accent-purple); box-shadow: 0 2px 8px rgba(128,35,195,0.18); flex-shrink:0;">
+    <div style="display:flex; flex-direction:column; gap:2px;">
+      <span style="font-size:16px; font-weight:700; color:var(--text-primary); letter-spacing:-0.3px;">Sebastian Maniak</span>
+      <span style="font-size:13px; font-weight:500; color:var(--text-secondary);">AI Principal Solutions Architect &middot; Solo.io</span>
+    </div>
+  </div>
+  <script>
+    (function() {
+      var img = document.getElementById('presenter-photo');
+      var sources = [
+        'sebastian-maniak.jpg',
+        'sebastian-maniak.png',
+        'https://avatars.slack-edge.com/2025-10-06/9657562592417_817475aae09174e64d56_original.jpg',
+        'https://unavatar.io/linkedin/sebastianmaniak'
+      ];
+      var svgFallback = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MDAgNDAwIiB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCI+CiAgPGRlZnM+CiAgICA8Y2xpcFBhdGggaWQ9ImNpcmNsZUNsaXAiPjxjaXJjbGUgY3g9IjIwMCIgY3k9IjIwMCIgcj0iMjAwIi8+PC9jbGlwUGF0aD4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0iYmdHcmFkIiBjeD0iNTAlIiBjeT0iNDAlIiByPSI2MCUiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjMWExZTJlIi8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzBhMGMxNCIvPgogICAgPC9yYWRpYWxHcmFkaWVudD4KICA8L2RlZnM+CiAgPGcgY2xpcC1wYXRoPSJ1cmwoI2NpcmNsZUNsaXApIj4KICAgIDxyZWN0IHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIiBmaWxsPSJ1cmwoI2JnR3JhZCkiLz4KICAgIDxjaXJjbGUgY3g9IjIwMCIgY3k9IjE2MCIgcj0iNzAiIGZpbGw9IiM1QzYxNzgiLz4KICAgIDxlbGxpcHNlIGN4PSIyMDAiIGN5PSIzNjAiIHJ4PSIxMDAiIHJ5PSI4MCIgZmlsbD0iIzVDNjE3OCIvPgogIDwvZz4KPC9zdmc+';
+      var idx = 0;
+      function tryNext() {
+        if (idx < sources.length) { img.src = sources[idx++]; } else { img.src = svgFallback; img.onerror = null; }
+      }
+      img.onerror = tryNext;
+      tryNext();
+    })();
+  </script>
+  <div style="margin-top:20px; display:flex; gap:10px;">
+    <span class="tag tag-purple">Gateway API</span>
+    <span class="tag tag-green">Multi-Provider</span>
+    <span class="tag tag-blue">P2C Algorithm</span>
+    <span class="tag tag-orange">A/B Testing</span>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!--  SLIDE 1 — THE PROBLEM                         -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="slide" id="slide-1">
+  <div class="section-number">01</div>
+  <div class="slide-label">The Problem</div>
+  <h2>Why <span class="gradient-orange">Load Balance</span> LLM Providers?</h2>
+  <p class="subtitle">Single-provider architectures are fragile, expensive, and inflexible.</p>
+  <div class="grid-3 mt-40">
+    <div class="card accent-top accent-red">
+      <div class="icon-badge red">&#x26A0;&#xFE0F;</div>
+      <h3 style="font-size:20px; margin-bottom:8px;">Rate Limits</h3>
+      <p style="color:var(--text-secondary); font-size:15px; line-height:1.5;">
+        Hit your provider's TPM/RPM cap and your entire application stalls. No fallback. No recovery.
+      </p>
+    </div>
+    <div class="card accent-top accent-orange">
+      <div class="icon-badge orange">&#x1F4B8;</div>
+      <h3 style="font-size:20px; margin-bottom:8px;">Vendor Lock-in</h3>
+      <p style="color:var(--text-secondary); font-size:15px; line-height:1.5;">
+        Hardcoded to one provider? You can't leverage pricing differences, new models, or negotiate better terms.
+      </p>
+    </div>
+    <div class="card accent-top accent-purple">
+      <div class="icon-badge purple">&#x1F50D;</div>
+      <h3 style="font-size:20px; margin-bottom:8px;">No Comparison</h3>
+      <p style="color:var(--text-secondary); font-size:15px; line-height:1.5;">
+        How do you A/B test models? Without traffic splitting, you're guessing which model performs best.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!--  SLIDE 2 — P2C ALGORITHM                       -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="slide" id="slide-2">
+  <div class="section-number">02</div>
+  <div class="slide-label">Core Algorithm</div>
+  <h2>Power of <span class="gradient-text">Two Choices</span></h2>
+  <p class="subtitle">Not round-robin. Not random. Intelligent, adaptive routing.</p>
+  <div class="grid-2 mt-40">
+    <div style="display:flex; flex-direction:column; gap:20px;">
+      <div class="point">
+        <div class="point-marker purple"></div>
+        <div class="point-text"><strong>Pick two random providers</strong> from the available pool for each incoming request</div>
+      </div>
+      <div class="point">
+        <div class="point-marker green"></div>
+        <div class="point-text"><strong>Score each provider</strong> using health, latency, and pending request count</div>
+      </div>
+      <div class="point">
+        <div class="point-marker blue"></div>
+        <div class="point-text"><strong>Route to the winner</strong> &mdash; the provider with the higher score gets the request</div>
+      </div>
+      <div class="point">
+        <div class="point-marker orange"></div>
+        <div class="point-text"><strong>Evict on 429s</strong> &mdash; rate-limited providers are temporarily removed from the pool</div>
+      </div>
+    </div>
+    <div>
+      <div class="code-block" style="font-size:14px;">
+        <div class="lang-tag">SCORING</div>
+<span class="code-comment">// P2C scoring formula</span>
+
+<span class="code-field">score</span> = <span class="code-type">health</span> / (1 + <span class="code-type">latency_penalty</span>)
+
+<span class="code-comment">// where</span>
+<span class="code-type">latency_penalty</span> =
+  <span class="code-field">request_latency</span> * (1 + <span class="code-field">pending</span> * <span class="code-value">0.1</span>)
+
+<span class="code-comment">// Health: EWMA success rate (&#x03B1; = 0.3)</span>
+<span class="code-comment">// Latency: EWMA of response time</span>
+<span class="code-comment">// Pending: active in-flight requests</span></div>
+      <div class="highlight-box mt-24" style="max-width:500px;">
+        <span style="font-size:14px; color:var(--text-secondary);">Higher health + lower latency + fewer pending = <strong style="color:var(--accent-purple);">higher score</strong></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!--  SLIDE 3 — HEALTH METRICS                      -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="slide" id="slide-3">
+  <div class="section-number">03</div>
+  <div class="slide-label">Observability</div>
+  <h2>How agentgateway <span class="gradient-green">Tracks Health</span></h2>
+  <p class="subtitle">Three real-time metrics power every routing decision.</p>
+  <div class="grid-3 mt-40">
+    <div class="card accent-top accent-green" style="padding:24px 28px;">
+      <div class="icon-badge green">&#x2764;&#xFE0F;</div>
+      <h3 style="font-size:18px; margin-bottom:8px;">Health Score (EWMA)</h3>
+      <p style="color:var(--text-secondary); font-size:14px; line-height:1.6; margin-bottom:12px;">
+        Exponentially-weighted moving average of success rate. Each success = 1.0, failure = 0.0. Recent results weigh more heavily.
+      </p>
+      <div class="score-bar"><div class="score-bar-fill" style="width:92%; background:linear-gradient(90deg, #0d9b6e, #1FEEB3);"></div></div>
+      <p style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--accent-green); margin-top:6px;">&#x03B1; = 0.3</p>
+    </div>
+    <div class="card accent-top accent-cyan" style="padding:24px 28px;">
+      <div class="icon-badge cyan">&#x23F1;&#xFE0F;</div>
+      <h3 style="font-size:18px; margin-bottom:8px;">Request Latency (EWMA)</h3>
+      <p style="color:var(--text-secondary); font-size:14px; line-height:1.6; margin-bottom:12px;">
+        Average response time in seconds. Only successful requests contribute &mdash; failures are excluded to avoid skewing.
+      </p>
+      <div class="score-bar"><div class="score-bar-fill" style="width:35%; background:linear-gradient(90deg, #20B7F3, #8023C3);"></div></div>
+      <p style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--accent-cyan); margin-top:6px;">lower = better</p>
+    </div>
+    <div class="card accent-top accent-orange" style="padding:24px 28px;">
+      <div class="icon-badge orange">&#x1F4E8;</div>
+      <h3 style="font-size:18px; margin-bottom:8px;">Pending Requests</h3>
+      <p style="color:var(--text-secondary); font-size:14px; line-height:1.6; margin-bottom:12px;">
+        Each active in-flight request adds a 10% penalty to the latency component. Naturally prevents overloading one provider.
+      </p>
+      <div class="score-bar"><div class="score-bar-fill" style="width:20%; background:linear-gradient(90deg, #FF804E, #FF4D4F);"></div></div>
+      <p style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--accent-orange); margin-top:6px;">+10% per request</p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!--  SLIDE 4 — ARCHITECTURE DIAGRAM                 -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="slide" id="slide-4">
+  <div class="section-number">04</div>
+  <div class="slide-label">Architecture</div>
+  <h2>Multi-Provider <span class="gradient-text">Routing</span></h2>
+  <p class="subtitle">One endpoint. Multiple providers. Automatic balancing.</p>
+  <div class="mt-40" style="display:flex; align-items:center; justify-content:center; gap:32px; width:100%; max-width:1100px;">
+    <!-- Client -->
+    <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+      <div class="flow-node hl-purple" style="min-width:160px;">
+        <div style="font-size:22px; margin-bottom:4px;">&#x1F4BB;</div>
+        <div>Your App</div>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">POST /chat</div>
+      </div>
+    </div>
+    <!-- Arrow -->
+    <div style="font-size:32px; color:var(--text-muted);">&#x2192;</div>
+    <!-- Gateway -->
+    <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+      <div class="flow-node hl-cyan" style="min-width:200px; padding:20px 28px;">
+        <div style="font-size:22px; margin-bottom:4px;">
+          <svg viewBox="0 0 1065 1065" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:40px; height:40px; vertical-align:middle;"><path d="M532.86 391.221C571.684 391.221 603.157 359.871 603.157 321.198C603.157 282.526 571.684 251.176 532.86 251.176C494.036 251.176 462.562 282.526 462.562 321.198C462.562 359.871 494.036 391.221 532.86 391.221Z" fill="#8023C3"/><path d="M532.86 602.659C571.684 602.659 603.157 571.308 603.157 532.636C603.157 493.964 571.684 462.613 532.86 462.613C494.036 462.613 462.562 493.964 462.562 532.636C462.562 571.308 494.036 602.659 532.86 602.659Z" fill="#8023C3"/><path d="M573.109 426.82C573.109 401.589 580.374 377.922 592.745 357.776L532.855 321.004L472.965 357.776C485.336 377.922 492.601 401.393 492.601 426.82C492.601 452.248 485.336 475.719 472.965 495.865L532.855 532.637L592.745 495.865C580.374 475.719 573.109 452.248 573.109 426.82Z" fill="#8023C3"/><path d="M705.453 496.842C744.277 496.842 775.75 465.492 775.75 426.82C775.75 388.147 744.277 356.797 705.453 356.797C666.629 356.797 635.156 388.147 635.156 426.82C635.156 465.492 666.629 496.842 705.453 496.842Z" fill="#8023C3"/><path d="M705.453 708.28C744.277 708.28 775.75 676.93 775.75 638.257C775.75 599.585 744.277 568.234 705.453 568.234C666.629 568.234 635.156 599.585 635.156 638.257C635.156 676.93 666.629 708.28 705.453 708.28Z" fill="#8023C3"/><path d="M745.703 532.637C745.703 507.405 752.968 483.738 765.339 463.592L705.449 426.82L645.559 463.592C657.929 483.738 665.195 507.209 665.195 532.637C665.195 558.064 657.929 581.535 645.559 601.681L705.449 638.453L765.339 601.681C752.968 581.535 745.703 558.064 745.703 532.637Z" fill="#8023C3"/><path d="M360.059 496.842C398.883 496.842 430.356 465.492 430.356 426.82C430.356 388.147 398.883 356.797 360.059 356.797C321.235 356.797 289.762 388.147 289.762 426.82C289.762 465.492 321.235 496.842 360.059 496.842Z" fill="#8023C3"/><path d="M360.059 708.278C398.883 708.278 430.356 676.928 430.356 638.255C430.356 599.583 398.883 568.232 360.059 568.232C321.235 568.232 289.762 599.583 289.762 638.255C289.762 676.928 321.235 708.278 360.059 708.278Z" fill="#8023C3"/><path d="M400.308 532.635C400.308 507.403 407.573 483.736 419.944 463.59L360.054 426.818L300.164 463.59C312.535 483.736 319.8 507.208 319.8 532.635C319.8 558.062 312.535 581.533 300.164 601.679L360.054 638.451L419.944 601.679C407.573 581.533 400.308 558.062 400.308 532.635Z" fill="#8023C3"/><path d="M532.86 813.901C571.684 813.901 603.157 782.551 603.157 743.878C603.157 705.206 571.684 673.855 532.86 673.855C494.036 673.855 462.562 705.206 462.562 743.878C462.562 782.551 494.036 813.901 532.86 813.901Z" fill="#8023C3"/></svg>
+        </div>
+        <div style="font-weight:700;">agentgateway</div>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">P2C Load Balancer</div>
+      </div>
+    </div>
+    <!-- Arrow -->
+    <div style="font-size:32px; color:var(--text-muted);">&#x2192;</div>
+    <!-- Providers -->
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <div class="flow-node hl-green" style="min-width:180px;">
+        <div style="font-size:16px; margin-bottom:2px;">&#x1F7E2;</div>
+        <div>OpenAI</div>
+        <div style="font-size:11px; color:var(--text-muted);">gpt-4o</div>
+      </div>
+      <div class="flow-node hl-orange" style="min-width:180px;">
+        <div style="font-size:16px; margin-bottom:2px;">&#x1F7E0;</div>
+        <div>Anthropic</div>
+        <div style="font-size:11px; color:var(--text-muted);">claude-sonnet-4-6</div>
+      </div>
+    </div>
+  </div>
+  <div class="highlight-box mt-32" style="max-width:700px;">
+    <span style="font-size:14px; color:var(--text-secondary);">Providers in the same <strong style="color:var(--accent-purple);">priority group</strong> are load balanced with P2C. Separate groups enable failover.</span>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!--  SLIDE 5 — BACKEND CONFIG                       -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="slide" id="slide-5">
+  <div class="section-number">05</div>
+  <div class="slide-label">Configuration</div>
+  <h2>The <span class="gradient-text">Backend</span> Resource</h2>
+  <p class="subtitle">One YAML. Two providers. Automatic load balancing.</p>
+  <div class="code-block mt-40" style="font-size:13px; max-width:800px;">
+    <div class="lang-tag">YAML</div>
+<span class="code-field">apiVersion</span>: <span class="code-string">agentgateway.dev/v1alpha1</span>
+<span class="code-field">kind</span>: <span class="code-type">AgentgatewayBackend</span>
+<span class="code-field">metadata</span>:
+  <span class="code-field">name</span>: <span class="code-string">loadbalanced-backend</span>
+  <span class="code-field">namespace</span>: <span class="code-string">agentgateway-system</span>
+<span class="code-field">spec</span>:
+  <span class="code-field">ai</span>:
+    <span class="code-field">groups</span>:                    <span class="code-comment"># providers in same group = P2C</span>
+      - <span class="code-field">providers</span>:
+          - <span class="code-field">name</span>: <span class="code-string">openai-gpt4</span>
+            <span class="code-field">openai</span>:
+              <span class="code-field">model</span>: <span class="code-value">gpt-4o</span>
+            <span class="code-field">policies</span>:
+              <span class="code-field">auth</span>:
+                <span class="code-field">secretRef</span>:
+                  <span class="code-field">name</span>: <span class="code-string">openai-secret</span>
+          - <span class="code-field">name</span>: <span class="code-string">anthropic-claude</span>
+            <span class="code-field">anthropic</span>:
+              <span class="code-field">model</span>: <span class="code-value">claude-sonnet-4-6</span>
+            <span class="code-field">policies</span>:
+              <span class="code-field">auth</span>:
+                <span class="code-field">secretRef</span>:
+                  <span class="code-field">name</span>: <span class="code-string">anthropic-secret</span></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!--  SLIDE 6 — HTTPROUTE                            -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="slide" id="slide-6">
+  <div class="section-number">06</div>
+  <div class="slide-label">Routing</div>
+  <h2>Gateway API <span class="gradient-text">HTTPRoute</span></h2>
+  <p class="subtitle">Standard Kubernetes Gateway API &mdash; nothing proprietary.</p>
+  <div class="grid-2 mt-40">
+    <div class="code-block" style="font-size:13px;">
+      <div class="lang-tag">YAML</div>
+<span class="code-field">apiVersion</span>: <span class="code-string">gateway.networking.k8s.io/v1</span>
+<span class="code-field">kind</span>: <span class="code-type">HTTPRoute</span>
+<span class="code-field">metadata</span>:
+  <span class="code-field">name</span>: <span class="code-string">loadbalanced-route</span>
+<span class="code-field">spec</span>:
+  <span class="code-field">parentRefs</span>:
+    - <span class="code-field">name</span>: <span class="code-string">agentgateway-proxy</span>
+  <span class="code-field">rules</span>:
+    - <span class="code-field">matches</span>:
+        - <span class="code-field">path</span>:
+            <span class="code-field">type</span>: <span class="code-value">PathPrefix</span>
+            <span class="code-field">value</span>: <span class="code-string">/chat</span>
+      <span class="code-field">backendRefs</span>:
+        - <span class="code-field">name</span>: <span class="code-string">loadbalanced-backend</span>
+          <span class="code-field">group</span>: <span class="code-string">agentgateway.dev</span>
+          <span class="code-field">kind</span>: <span class="code-type">AgentgatewayBackend</span></div>
+    <div style="display:flex; flex-direction:column; gap:20px;">
+      <div class="point">
+        <div class="point-marker purple"></div>
+        <div class="point-text"><strong>Path-based routing</strong> &mdash; <code style="color:var(--accent-purple); background:rgba(148,45,231,0.06); padding:2px 6px; border-radius:4px;">/chat</code> maps to the load balanced backend</div>
+      </div>
+      <div class="point">
+        <div class="point-marker green"></div>
+        <div class="point-text"><strong>Standard Gateway API</strong> &mdash; works with any Gateway API compatible tooling</div>
+      </div>
+      <div class="point">
+        <div class="point-marker blue"></div>
+        <div class="point-text"><strong>Custom backend type</strong> &mdash; references <code style="color:var(--accent-purple); background:rgba(148,45,231,0.06); padding:2px 6px; border-radius:4px;">AgentgatewayBackend</code> instead of a Service</div>
+      </div>
+      <div class="highlight-box mt-24" style="max-width:450px;">
+        <span style="font-size:14px; color:var(--text-secondary);">Your app sends requests to <strong style="color:var(--accent-purple);">/chat</strong> &mdash; agentgateway handles provider selection</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!--  SLIDE 7 — A/B TESTING                          -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="slide" id="slide-7">
+  <div class="section-number">07</div>
+  <div class="slide-label">A/B Testing</div>
+  <h2>Traffic <span class="gradient-text">Splitting</span></h2>
+  <p class="subtitle">Compare models in production with weighted routing.</p>
+  <div class="grid-2 mt-40">
+    <div>
+      <div style="display:flex; align-items:center; gap:24px; margin-bottom:24px;">
+        <div style="text-align:center;">
+          <div class="weight-badge" style="background:rgba(13,155,110,0.1); color:#0d9b6e;">80%</div>
+          <p style="font-size:13px; font-weight:600; color:var(--text-primary); margin-top:8px;">Stable</p>
+          <p style="font-size:11px; color:var(--text-muted);">gpt-4o</p>
+        </div>
+        <div style="font-size:24px; color:var(--text-muted);">vs</div>
+        <div style="text-align:center;">
+          <div class="weight-badge" style="background:rgba(255,128,78,0.1); color:#FF804E;">20%</div>
+          <p style="font-size:13px; font-weight:600; color:var(--text-primary); margin-top:8px;">Canary</p>
+          <p style="font-size:11px; color:var(--text-muted);">gpt-4o-mini</p>
+        </div>
+      </div>
+      <div class="point">
+        <div class="point-marker purple"></div>
+        <div class="point-text"><strong>Two separate backends</strong> &mdash; each with its own model configuration</div>
+      </div>
+      <div class="point">
+        <div class="point-marker green"></div>
+        <div class="point-text"><strong>Weighted HTTPRoute</strong> &mdash; Gateway API native <code style="color:var(--accent-purple); background:rgba(148,45,231,0.06); padding:2px 6px; border-radius:4px;">weight</code> field</div>
+      </div>
+      <div class="point">
+        <div class="point-marker orange"></div>
+        <div class="point-text"><strong>Gradual rollout</strong> &mdash; shift weights as confidence grows: 80/20 &rarr; 50/50 &rarr; 0/100</div>
+      </div>
+    </div>
+    <div class="code-block" style="font-size:12px;">
+      <div class="lang-tag">YAML</div>
+<span class="code-field">rules</span>:
+  - <span class="code-field">matches</span>:
+      - <span class="code-field">path</span>:
+          <span class="code-field">value</span>: <span class="code-string">/test</span>
+    <span class="code-field">backendRefs</span>:
+      - <span class="code-field">name</span>: <span class="code-string">stable-backend</span>
+        <span class="code-field">group</span>: <span class="code-string">agentgateway.dev</span>
+        <span class="code-field">kind</span>: <span class="code-type">AgentgatewayBackend</span>
+        <span class="code-field">weight</span>: <span class="code-value">80</span>            <span class="code-comment"># &#x2190; 80% traffic</span>
+      - <span class="code-field">name</span>: <span class="code-string">canary-backend</span>
+        <span class="code-field">group</span>: <span class="code-string">agentgateway.dev</span>
+        <span class="code-field">kind</span>: <span class="code-type">AgentgatewayBackend</span>
+        <span class="code-field">weight</span>: <span class="code-value">20</span>            <span class="code-comment"># &#x2190; 20% traffic</span></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!--  SLIDE 8 — KNOWN LIMITATIONS                    -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="slide" id="slide-8">
+  <div class="slide-label">Good to Know</div>
+  <h2>Eviction &amp; <span class="gradient-orange">Limitations</span></h2>
+  <p class="subtitle">Understanding what triggers failover &mdash; and what doesn't.</p>
+  <div class="grid-2 mt-40" style="max-width:1000px;">
+    <div class="card accent-top accent-green" style="padding:24px 28px;">
+      <h3 style="font-size:20px; margin-bottom:12px; color:var(--accent-green);">Triggers Eviction</h3>
+      <table class="compare-table" style="max-width:100%;">
+        <tr><th>Response</th><th>Action</th></tr>
+        <tr>
+          <td><code style="color:var(--accent-green); font-weight:600;">429</code> Too Many Requests</td>
+          <td style="color:var(--accent-green); font-weight:600;">Provider evicted from pool</td>
+        </tr>
+        <tr>
+          <td>Rate-limit headers present</td>
+          <td style="color:var(--accent-green); font-weight:600;">Respects retry-after</td>
+        </tr>
+      </table>
+    </div>
+    <div class="card accent-top accent-red" style="padding:24px 28px;">
+      <h3 style="font-size:20px; margin-bottom:12px; color:var(--accent-red);">Does NOT Trigger Eviction</h3>
+      <table class="compare-table" style="max-width:100%;">
+        <tr><th>Response</th><th>Action</th></tr>
+        <tr>
+          <td><code style="color:var(--accent-red);">503</code> Service Unavailable</td>
+          <td>Health score degrades only</td>
+        </tr>
+        <tr>
+          <td>Connection errors / DNS failures</td>
+          <td>Health score degrades only</td>
+        </tr>
+        <tr>
+          <td>Timeouts</td>
+          <td>Health score degrades only</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  <div class="quote-block mt-32" style="max-width:750px; font-size:18px;">
+    Providers with degraded health still receive traffic &mdash; just less of it. Only 429s with proper rate-limit headers cause full eviction.
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!--  SLIDE 9 — DEMO                                 -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="slide" id="slide-9">
+  <div class="section-number">09</div>
+  <div class="slide-label">Live Demo</div>
+  <h2>Try It <span class="gradient-text">Yourself</span></h2>
+  <p class="subtitle">Three scripts. Five minutes. Everything on a local kind cluster.</p>
+  <div class="grid-3 mt-40">
+    <div class="card accent-top accent-purple" style="padding:24px 28px;">
+      <div class="icon-badge purple">&#x1F680;</div>
+      <h3 style="font-size:18px; margin-bottom:8px;">1. Deploy</h3>
+      <div class="code-block" style="font-size:13px; padding:14px 18px; margin-top:12px;">
+<span class="code-comment"># Set your keys</span>
+<span class="code-keyword">export</span> OPENAI_API_KEY=<span class="code-string">"..."</span>
+<span class="code-keyword">export</span> ANTHROPIC_API_KEY=<span class="code-string">"..."</span>
+
+<span class="code-comment"># Deploy everything</span>
+<span class="code-value">./deploy.sh</span></div>
+    </div>
+    <div class="card accent-top accent-cyan" style="padding:24px 28px;">
+      <div class="icon-badge cyan">&#x1F9EA;</div>
+      <h3 style="font-size:18px; margin-bottom:8px;">2. Test</h3>
+      <div class="code-block" style="font-size:13px; padding:14px 18px; margin-top:12px;">
+<span class="code-comment"># Port-forward the gateway</span>
+<span class="code-keyword">kubectl</span> port-forward \
+  -n agentgateway-system \
+  svc/agentgateway-proxy 8080:80
+
+<span class="code-comment"># Run tests</span>
+<span class="code-value">./test.sh</span></div>
+    </div>
+    <div class="card accent-top accent-green" style="padding:24px 28px;">
+      <div class="icon-badge green">&#x1F9F9;</div>
+      <h3 style="font-size:18px; margin-bottom:8px;">3. Cleanup</h3>
+      <div class="code-block" style="font-size:13px; padding:14px 18px; margin-top:12px;">
+<span class="code-comment"># Tear it all down</span>
+<span class="code-value">./cleanup.sh</span>
+
+<span class="code-comment"># Removes:</span>
+<span class="code-comment">#   - All backends</span>
+<span class="code-comment">#   - All routes</span>
+<span class="code-comment">#   - Secrets</span>
+<span class="code-comment">#   - kind cluster</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!--  SLIDE 10 — TAKEAWAYS                           -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="slide" id="slide-10">
+  <div class="slide-label">Takeaways</div>
+  <h2>Four Things to <span class="gradient-text">Remember</span></h2>
+  <div style="display:flex; flex-direction:column; gap:24px; margin-top:40px; max-width:800px;">
+    <div style="display:flex; align-items:flex-start; gap:20px;">
+      <div style="width:40px; height:40px; border-radius:10px; background:rgba(128,35,195,0.08); display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--accent-purple); flex-shrink:0; font-size:18px;">1</div>
+      <div>
+        <h3 style="font-size:18px; margin-bottom:4px;">P2C is smarter than round-robin</h3>
+        <p style="color:var(--text-secondary); font-size:15px;">Adaptive scoring considers health, latency, and load. Not static. Not random.</p>
+      </div>
+    </div>
+    <div style="display:flex; align-items:flex-start; gap:20px;">
+      <div style="width:40px; height:40px; border-radius:10px; background:rgba(32,183,243,0.08); display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--accent-cyan); flex-shrink:0; font-size:18px;">2</div>
+      <div>
+        <h3 style="font-size:18px; margin-bottom:4px;">Multi-provider is one YAML away</h3>
+        <p style="color:var(--text-secondary); font-size:15px;">Put providers in the same group &mdash; agentgateway handles the rest. No SDK changes.</p>
+      </div>
+    </div>
+    <div style="display:flex; align-items:flex-start; gap:20px;">
+      <div style="width:40px; height:40px; border-radius:10px; background:rgba(5,150,105,0.08); display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--accent-green); flex-shrink:0; font-size:18px;">3</div>
+      <div>
+        <h3 style="font-size:18px; margin-bottom:4px;">A/B testing uses standard Gateway API</h3>
+        <p style="color:var(--text-secondary); font-size:15px;">Weighted <code style="color:var(--accent-purple); background:rgba(148,45,231,0.06); padding:2px 6px; border-radius:4px;">backendRefs</code> &mdash; no custom annotations, no proprietary config.</p>
+      </div>
+    </div>
+    <div style="display:flex; align-items:flex-start; gap:20px;">
+      <div style="width:40px; height:40px; border-radius:10px; background:rgba(217,119,6,0.08); display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--accent-orange); flex-shrink:0; font-size:18px;">4</div>
+      <div>
+        <h3 style="font-size:18px; margin-bottom:4px;">Observability is built in</h3>
+        <p style="color:var(--text-secondary); font-size:15px;">OpenTelemetry metrics, health scores, and per-provider traces. Verify balancing is working.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!--  SLIDE 11 — THANK YOU                           -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="slide" id="slide-11">
+  <div class="corner-accent tr"></div>
+  <div class="corner-accent bl"></div>
+  <div style="margin-bottom:20px;">
+    <img src="https://avatars.githubusercontent.com/u/26319377?s=200&v=4" alt="Solo.io" style="width:56px; height:56px; border-radius:14px; box-shadow: var(--shadow-md);" onerror="this.style.display='none'">
+  </div>
+  <h1 style="font-size:56px;"><span class="gradient-text">Thank You</span></h1>
+  <p class="subtitle" style="margin-top:20px; max-width:700px;">
+    Everything runs on a kind cluster. agentgateway + Gateway API. Open source.
+  </p>
+  <div style="display:flex; align-items:center; gap:20px; margin-top:48px;">
+    <svg viewBox="0 0 1065 1065" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:80px; height:80px;"><path d="M532.86 391.221C571.684 391.221 603.157 359.871 603.157 321.198C603.157 282.526 571.684 251.176 532.86 251.176C494.036 251.176 462.562 282.526 462.562 321.198C462.562 359.871 494.036 391.221 532.86 391.221Z" fill="#8023C3"/><path d="M532.86 602.659C571.684 602.659 603.157 571.308 603.157 532.636C603.157 493.964 571.684 462.613 532.86 462.613C494.036 462.613 462.562 493.964 462.562 532.636C462.562 571.308 494.036 602.659 532.86 602.659Z" fill="#8023C3"/><path d="M573.109 426.82C573.109 401.589 580.374 377.922 592.745 357.776L532.855 321.004L472.965 357.776C485.336 377.922 492.601 401.393 492.601 426.82C492.601 452.248 485.336 475.719 472.965 495.865L532.855 532.637L592.745 495.865C580.374 475.719 573.109 452.248 573.109 426.82Z" fill="#8023C3"/><path d="M705.453 496.842C744.277 496.842 775.75 465.492 775.75 426.82C775.75 388.147 744.277 356.797 705.453 356.797C666.629 356.797 635.156 388.147 635.156 426.82C635.156 465.492 666.629 496.842 705.453 496.842Z" fill="#8023C3"/><path d="M705.453 708.28C744.277 708.28 775.75 676.93 775.75 638.257C775.75 599.585 744.277 568.234 705.453 568.234C666.629 568.234 635.156 599.585 635.156 638.257C635.156 676.93 666.629 708.28 705.453 708.28Z" fill="#8023C3"/><path d="M745.703 532.637C745.703 507.405 752.968 483.738 765.339 463.592L705.449 426.82L645.559 463.592C657.929 483.738 665.195 507.209 665.195 532.637C665.195 558.064 657.929 581.535 645.559 601.681L705.449 638.453L765.339 601.681C752.968 581.535 745.703 558.064 745.703 532.637Z" fill="#8023C3"/><path d="M360.059 496.842C398.883 496.842 430.356 465.492 430.356 426.82C430.356 388.147 398.883 356.797 360.059 356.797C321.235 356.797 289.762 388.147 289.762 426.82C289.762 465.492 321.235 496.842 360.059 496.842Z" fill="#8023C3"/><path d="M360.059 708.278C398.883 708.278 430.356 676.928 430.356 638.255C430.356 599.583 398.883 568.232 360.059 568.232C321.235 568.232 289.762 599.583 289.762 638.255C289.762 676.928 321.235 708.278 360.059 708.278Z" fill="#8023C3"/><path d="M400.308 532.635C400.308 507.403 407.573 483.736 419.944 463.59L360.054 426.818L300.164 463.59C312.535 483.736 319.8 507.208 319.8 532.635C319.8 558.062 312.535 581.533 300.164 601.679L360.054 638.451L419.944 601.679C407.573 581.533 400.308 558.062 400.308 532.635Z" fill="#8023C3"/><path d="M532.86 813.901C571.684 813.901 603.157 782.551 603.157 743.878C603.157 705.206 571.684 673.855 532.86 673.855C494.036 673.855 462.562 705.206 462.562 743.878C462.562 782.551 494.036 813.901 532.86 813.901Z" fill="#8023C3"/></svg>
+  </div>
+  <div style="margin-top:40px; display:flex; flex-direction:column; align-items:center; gap:16px;">
+    <div style="display:flex; gap:12px;">
+      <span class="tag tag-purple" style="font-size:14px; padding:8px 20px;">Gateway API</span>
+      <span class="tag tag-green" style="font-size:14px; padding:8px 20px;">Multi-Provider LB</span>
+      <span class="tag tag-blue" style="font-size:14px; padding:8px 20px;">A/B Testing</span>
+    </div>
+    <div style="margin-top:12px; display:flex; gap:24px; font-size:14px; color:var(--text-muted);">
+      <a href="https://agentgateway.dev/docs/kubernetes/main/llm/load-balancing/" style="color:var(--accent-purple); text-decoration:none; font-weight:600;">Docs</a>
+      <a href="https://github.com/solo-io/agentgateway" style="color:var(--accent-purple); text-decoration:none; font-weight:600;">GitHub</a>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!--  NAVIGATION                                     -->
+<!-- ═══════════════════════════════════════════════ -->
+<script>
+(function() {
+  const slides = document.querySelectorAll('.slide');
+  const total = slides.length;
+  let cur = 0;
+
+  function update() {
+    document.getElementById('progressBar').style.width = ((cur + 1) / total * 100) + '%';
+    document.getElementById('slideCounter').textContent = (cur + 1) + ' / ' + total;
+  }
+
+  function go(n) {
+    if (n < 0 || n >= total || n === cur) return;
+    slides[cur].classList.remove('active');
+    cur = n;
+    slides[cur].classList.add('active');
+    update();
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') { e.preventDefault(); go(cur + 1); }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); go(cur - 1); }
+    if (e.key === 'Home') { e.preventDefault(); go(0); }
+    if (e.key === 'End') { e.preventDefault(); go(total - 1); }
+  });
+
+  document.addEventListener('click', function(e) {
+    if (e.clientX > window.innerWidth / 2) go(cur + 1); else go(cur - 1);
+  });
+
+  let tx = 0;
+  document.addEventListener('touchstart', function(e) { tx = e.touches[0].clientX; });
+  document.addEventListener('touchend', function(e) {
+    const dx = e.changedTouches[0].clientX - tx;
+    if (Math.abs(dx) > 50) { if (dx < 0) go(cur + 1); else go(cur - 1); }
+  });
+
+  update();
+})();
+</script>
+
+</body>
+</html>
