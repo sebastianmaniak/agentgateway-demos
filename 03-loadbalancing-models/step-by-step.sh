@@ -145,7 +145,7 @@ desc() {
 }
 
 # Progress bar for visual step tracking
-TOTAL_STEPS=12
+TOTAL_STEPS=13
 show_progress() {
   local current=$1
   local filled=$((current * 40 / TOTAL_STEPS))
@@ -531,10 +531,59 @@ success "HTTPRoute for /chat created."
 pause
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  STEP 9 — Create A/B testing backends
+#  STEP 9 — Port-forward and test load balancing
 # ═══════════════════════════════════════════════════════════════════════════
-header "STEP 9 of 12" "Create A/B Testing Backends" "$ORANGE"
+header "STEP 9 of 13" "Test Load Balancing (/chat)" "$ORANGE"
 show_progress 9
+
+echo -e "  ${WHITE}${BOLD}Starting port-forward...${RESET}"
+echo ""
+show_cmd "kubectl port-forward -n ${NAMESPACE} svc/agentgateway-proxy 8080:80 &"
+echo ""
+
+kubectl port-forward -n "${NAMESPACE}" svc/agentgateway-proxy 8080:80 &
+PF_PID=$!
+sleep 3
+
+echo ""
+echo -e "  ${BG_PURPLE}${WHITE}${BOLD} TEST: Multi-Provider Load Balancing (/chat) ${RESET}"
+echo ""
+show_cmd "curl -s \"http://localhost:8080/chat\" \\"
+echo -e "    ${WHITE}-H \"Content-Type: application/json\" \\${RESET}"
+echo -e "    ${WHITE}-d '{\"messages\": [{\"role\": \"user\", \"content\": \"Say hello\"}]}' | jq -r '.model'${RESET}"
+echo ""
+echo -e "  ${DIM}Sending 5 requests — expect responses from both providers...${RESET}"
+echo ""
+
+for i in 1 2 3 4 5; do
+  MODEL=$(curl -s "http://localhost:8080/chat" \
+    -H "Content-Type: application/json" \
+    -d '{"messages": [{"role": "user", "content": "Say hello in one sentence."}]}' \
+    | jq -r '.model // "unknown"')
+  if [[ "$MODEL" == *"claude"* ]]; then
+    COLOR="$ORANGE"
+    LABEL="Anthropic"
+  else
+    COLOR="$GREEN"
+    LABEL="OpenAI   "
+  fi
+  echo -e "  ${ROCKET} Request ${WHITE}${BOLD}${i}${RESET}  ${ARROW}  ${COLOR}${BOLD}${MODEL}${RESET}  ${DIM}(${LABEL})${RESET}"
+done
+
+echo ""
+success "Load balancing verified — requests distributed across providers."
+
+# Stop port-forward before A/B setup
+kill $PF_PID 2>/dev/null || true
+wait $PF_PID 2>/dev/null || true
+
+pause
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  STEP 10 — Create A/B testing backends
+# ═══════════════════════════════════════════════════════════════════════════
+header "STEP 10 of 13" "Create A/B Testing Backends" "$ORANGE"
+show_progress 10
 
 desc "Two separate backends for traffic splitting."
 echo ""
@@ -587,10 +636,10 @@ success "Stable and canary backends created."
 pause
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  STEP 10 — Create HTTPRoute for /test with weighted traffic splitting
+#  STEP 11 — Create HTTPRoute for /test with weighted traffic splitting
 # ═══════════════════════════════════════════════════════════════════════════
-header "STEP 10 of 12" "Create HTTPRoute for /test (80/20 Split)" "$CYAN"
-show_progress 10
+header "STEP 11 of 13" "Create HTTPRoute for /test (80/20 Split)" "$CYAN"
+show_progress 11
 
 desc "Uses Gateway API weighted backendRefs to split traffic."
 echo ""
@@ -637,10 +686,10 @@ success "A/B test route created (80/20 split)."
 pause
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  STEP 11 — Verify all resources
+#  STEP 12 — Verify all resources
 # ═══════════════════════════════════════════════════════════════════════════
-header "STEP 11 of 12" "Verify All Resources" "$GREEN"
-show_progress 11
+header "STEP 12 of 13" "Verify All Resources" "$GREEN"
+show_progress 12
 
 desc "Checking that everything was created correctly..."
 echo ""
@@ -674,10 +723,10 @@ success "All resources verified."
 pause
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  STEP 12 — Port-forward and test
+#  STEP 13 — Test A/B traffic splitting
 # ═══════════════════════════════════════════════════════════════════════════
-header "STEP 12 of 12" "Test the Endpoints" "$ORANGE"
-show_progress 12
+header "STEP 13 of 13" "Test A/B Traffic Splitting (/test)" "$CYAN"
+show_progress 13
 
 echo -e "  ${WHITE}${BOLD}Starting port-forward...${RESET}"
 echo ""
@@ -688,37 +737,8 @@ kubectl port-forward -n "${NAMESPACE}" svc/agentgateway-proxy 8080:80 &
 PF_PID=$!
 sleep 3
 
-# ── Test 1 ──
 echo ""
-echo -e "  ${BG_PURPLE}${WHITE}${BOLD} TEST 1: Multi-Provider Load Balancing (/chat) ${RESET}"
-echo ""
-show_cmd "curl -s \"http://localhost:8080/chat\" \\"
-echo -e "    ${WHITE}-H \"Content-Type: application/json\" \\${RESET}"
-echo -e "    ${WHITE}-d '{\"messages\": [{\"role\": \"user\", \"content\": \"Say hello\"}]}' | jq -r '.model'${RESET}"
-echo ""
-echo -e "  ${DIM}Sending 5 requests — expect responses from both providers...${RESET}"
-echo ""
-
-for i in 1 2 3 4 5; do
-  MODEL=$(curl -s "http://localhost:8080/chat" \
-    -H "Content-Type: application/json" \
-    -d '{"messages": [{"role": "user", "content": "Say hello in one sentence."}]}' \
-    | jq -r '.model // "unknown"')
-  if [[ "$MODEL" == *"claude"* ]]; then
-    COLOR="$ORANGE"
-    LABEL="Anthropic"
-  else
-    COLOR="$GREEN"
-    LABEL="OpenAI   "
-  fi
-  echo -e "  ${ROCKET} Request ${WHITE}${BOLD}${i}${RESET}  ${ARROW}  ${COLOR}${BOLD}${MODEL}${RESET}  ${DIM}(${LABEL})${RESET}"
-done
-
-echo ""
-pause
-
-# ── Test 2 ──
-echo -e "  ${BG_CYAN}${WHITE}${BOLD} TEST 2: A/B Traffic Splitting (/test) ${RESET}"
+echo -e "  ${BG_CYAN}${WHITE}${BOLD} TEST: A/B Traffic Splitting (/test) ${RESET}"
 echo ""
 show_cmd "curl -s \"http://localhost:8080/test\" \\"
 echo -e "    ${WHITE}-H \"Content-Type: application/json\" \\${RESET}"
@@ -805,26 +825,29 @@ echo ""
 echo -e "  ${PURPLE}${BOLD}# Step 8: Create HTTPRoute /chat${RESET}"
 echo -e "  ${YELLOW}\$ ${WHITE}kubectl apply -f loadbalanced-route.yaml${RESET}"
 echo ""
-echo -e "  ${ORANGE}${BOLD}# Step 9: Create A/B backends${RESET}"
-echo -e "  ${YELLOW}\$ ${WHITE}kubectl apply -f ab-backends.yaml${RESET}"
-echo ""
-echo -e "  ${CYAN}${BOLD}# Step 10: Create weighted HTTPRoute /test${RESET}"
-echo -e "  ${YELLOW}\$ ${WHITE}kubectl apply -f ab-test-route.yaml${RESET}"
-echo ""
-echo -e "  ${GREEN}${BOLD}# Step 11: Verify resources${RESET}"
-echo -e "  ${YELLOW}\$ ${WHITE}kubectl get gateway,httproute,agentgatewaybackend -n agentgateway-system${RESET}"
-echo ""
-echo -e "  ${ORANGE}${BOLD}# Step 12: Test${RESET}"
+echo -e "  ${ORANGE}${BOLD}# Step 9: Test load balancing (/chat)${RESET}"
 echo -e "  ${YELLOW}\$ ${WHITE}kubectl port-forward -n agentgateway-system svc/agentgateway-proxy 8080:80 &${RESET}"
 echo -e "  ${YELLOW}\$ ${WHITE}curl -s http://localhost:8080/chat -H 'Content-Type: application/json' \\${RESET}"
 echo -e "    ${WHITE}-d '{\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}]}' | jq -r '.model'${RESET}"
-echo -e "  ${YELLOW}\$ ${WHITE}curl -s http://localhost:8080/test ... | jq -r '.model'${RESET}"
+echo ""
+echo -e "  ${ORANGE}${BOLD}# Step 10: Create A/B backends${RESET}"
+echo -e "  ${YELLOW}\$ ${WHITE}kubectl apply -f ab-backends.yaml${RESET}"
+echo ""
+echo -e "  ${CYAN}${BOLD}# Step 11: Create weighted HTTPRoute /test${RESET}"
+echo -e "  ${YELLOW}\$ ${WHITE}kubectl apply -f ab-test-route.yaml${RESET}"
+echo ""
+echo -e "  ${GREEN}${BOLD}# Step 12: Verify resources${RESET}"
+echo -e "  ${YELLOW}\$ ${WHITE}kubectl get gateway,httproute,agentgatewaybackend -n agentgateway-system${RESET}"
+echo ""
+echo -e "  ${CYAN}${BOLD}# Step 13: Test A/B traffic splitting (/test)${RESET}"
+echo -e "  ${YELLOW}\$ ${WHITE}curl -s http://localhost:8080/test -H 'Content-Type: application/json' \\${RESET}"
+echo -e "    ${WHITE}-d '{\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}]}' | jq -r '.model'${RESET}"
 echo ""
 echo -e "  ${RED}${BOLD}# Cleanup${RESET}"
 echo -e "  ${YELLOW}\$ ${WHITE}./cleanup.sh${RESET}"
 
 echo ""
-show_progress 12
+show_progress 13
 echo ""
 
 header "DONE" "Demo complete!" "$PURPLE"

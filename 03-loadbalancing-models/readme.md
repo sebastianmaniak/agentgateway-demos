@@ -194,7 +194,40 @@ spec:
           kind: AgentgatewayBackend
 ```
 
-### Step 9: Create A/B testing backends with traffic splitting
+### Step 9: Port-forward and test load balancing
+
+Start a port-forward to the gateway proxy, then verify that requests to `/chat` are load balanced across OpenAI and Anthropic.
+
+```bash
+# Start port-forward (run in background)
+kubectl port-forward -n agentgateway-system svc/agentgateway-proxy 8080:80 &
+```
+
+Wait a few seconds for the port-forward to establish, then send requests:
+
+```bash
+# Single request — check which model responds
+curl -s "http://localhost:8080/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"messages": [{"role": "user", "content": "Say hello and tell me which model you are"}]}' | jq -r '.model'
+
+# Multiple requests — expect a mix of gpt-4o and claude-sonnet-4-6
+for i in {1..10}; do
+  echo "--- Request $i ---"
+  curl -s "http://localhost:8080/chat" \
+    -H "Content-Type: application/json" \
+    -d '{"messages": [{"role": "user", "content": "Say hello and tell me which model you are"}]}' | jq -r '.model'
+done
+
+# See the full response (model, tokens, content)
+curl -s "http://localhost:8080/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"messages": [{"role": "user", "content": "Say hello and tell me which model you are"}]}' | jq .
+```
+
+You should see responses alternating between `gpt-4o` (OpenAI) and `claude-sonnet-4-6` (Anthropic) as P2C balances based on health and latency.
+
+### Step 10: Create A/B testing backends with traffic splitting
 
 Two separate backends — one stable, one canary — with weighted routing (80/20).
 
@@ -260,24 +293,35 @@ spec:
           weight: 20
 ```
 
-### Step 10: Test
+### Step 11: Test A/B traffic splitting
+
+Send requests to `/test` and verify the 80/20 split between gpt-4o (stable) and gpt-4o-mini (canary).
 
 ```bash
-# Test load balancing across providers (hit /chat multiple times)
+# Single request — check which model responds
+curl -s "http://localhost:8080/test" \
+  -H "Content-Type: application/json" \
+  -d '{"messages": [{"role": "user", "content": "Say hello and tell me which model you are"}]}' | jq -r '.model'
+
+# Multiple requests — expect ~80% gpt-4o and ~20% gpt-4o-mini
 for i in {1..10}; do
   echo "--- Request $i ---"
-  curl -s "localhost:8080/chat" \
+  curl -s "http://localhost:8080/test" \
     -H "Content-Type: application/json" \
     -d '{"messages": [{"role": "user", "content": "Say hello and tell me which model you are"}]}' | jq -r '.model'
 done
 
-# Test A/B traffic splitting (hit /test multiple times)
-for i in {1..10}; do
-  echo "--- Request $i ---"
-  curl -s "localhost:8080/test" \
-    -H "Content-Type: application/json" \
-    -d '{"messages": [{"role": "user", "content": "Say hello and tell me which model you are"}]}' | jq -r '.model'
-done
+# See the full response
+curl -s "http://localhost:8080/test" \
+  -H "Content-Type: application/json" \
+  -d '{"messages": [{"role": "user", "content": "Say hello and tell me which model you are"}]}' | jq .
+```
+
+You should see roughly 8 out of 10 requests going to `gpt-4o` and 2 out of 10 to `gpt-4o-mini`.
+
+```bash
+# Stop the port-forward when done
+kill %1
 ```
 
 ## Cleanup
