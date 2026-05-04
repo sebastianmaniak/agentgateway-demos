@@ -14,7 +14,7 @@
 ##############################################################################
 set -euo pipefail
 
-CLUSTER_NAME="agw-series"
+CLUSTER_NAME="agw-content-based"
 CLUSTER_CONTEXT="kind-${CLUSTER_NAME}"
 NAMESPACE="agentgateway-system"
 AGW_VERSION="v1.1.0"

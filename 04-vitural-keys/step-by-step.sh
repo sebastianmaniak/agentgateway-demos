@@ -13,7 +13,7 @@
 ##############################################################################
 set -euo pipefail
 
-CLUSTER_NAME="agw-series"
+CLUSTER_NAME="agw-virtual-keys"
 NAMESPACE="agentgateway-system"
 AGW_VERSION="v1.1.0"
 GATEWAY_API_VERSION="v1.5.0"

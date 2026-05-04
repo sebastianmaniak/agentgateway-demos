@@ -16,7 +16,7 @@ set -euo pipefail
 ##############################################################################
 
 GATEWAY_URL="${GATEWAY_URL:-localhost:8080}"
-CLUSTER_NAME="agw-series"
+CLUSTER_NAME="agw-content-based"
 CLUSTER_CONTEXT="kind-${CLUSTER_NAME}"
 NAMESPACE="agentgateway-system"
 

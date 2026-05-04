@@ -2,20 +2,19 @@
 set -euo pipefail
 
 ##############################################################################
-# deploy.sh — Deploy AgentGateway LLM Load Balancing Demo
+# deploy.sh — Install AgentGateway and Set Up a Simple LLM Proxy
 #
-# Deploys a kind cluster with AgentGateway configured for:
-#   1. Multi-provider load balancing (OpenAI + Anthropic) on /chat
-#   2. A/B traffic splitting (gpt-4o 80% / gpt-4o-mini 20%) on /test
+# Deploys a kind cluster with AgentGateway configured as a proxy to OpenAI.
+# After deployment, all requests to /chat are forwarded to OpenAI's gpt-4o.
 #
 # Prerequisites:
 #   - kind, kubectl, helm, jq installed
-#   - OPENAI_API_KEY and ANTHROPIC_API_KEY environment variables set
+#   - OPENAI_API_KEY environment variable set
 ##############################################################################
 
-CLUSTER_NAME="agw-loadbalancing"
+CLUSTER_NAME="agw-install"
 NAMESPACE="agentgateway-system"
-AGW_VERSION="v1.0.1"
+AGW_VERSION="v1.1.0"
 GATEWAY_API_VERSION="v1.5.0"
 
 # ---------------------------------------------------------------------------
@@ -32,11 +31,6 @@ done
 
 if [[ -z "${OPENAI_API_KEY:-}" ]]; then
   echo "ERROR: OPENAI_API_KEY environment variable is not set." >&2
-  exit 1
-fi
-
-if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
-  echo "ERROR: ANTHROPIC_API_KEY environment variable is not set." >&2
   exit 1
 fi
 
@@ -78,7 +72,6 @@ helm upgrade -i agentgateway oci://cr.agentgateway.dev/charts/agentgateway \
   --namespace "${NAMESPACE}" \
   --version "${AGW_VERSION}" \
   --set controller.image.pullPolicy=Always \
-  --set controller.extraEnv.KGW_ENABLE_GATEWAY_API_EXPERIMENTAL_FEATURES=true \
   --wait
 
 # ---------------------------------------------------------------------------
@@ -114,10 +107,10 @@ spec:
 EOF
 
 # ---------------------------------------------------------------------------
-# Step 6: Create API key secrets
+# Step 6: Create API key secret
 # ---------------------------------------------------------------------------
 echo ""
-echo "==> Step 6: Creating API key secrets..."
+echo "==> Step 6: Creating OpenAI API key secret..."
 
 kubectl apply -f- <<EOF
 apiVersion: v1
@@ -128,64 +121,44 @@ metadata:
 type: Opaque
 stringData:
   Authorization: "${OPENAI_API_KEY}"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: anthropic-secret
-  namespace: ${NAMESPACE}
-type: Opaque
-stringData:
-  Authorization: "${ANTHROPIC_API_KEY}"
 EOF
 
 # ---------------------------------------------------------------------------
-# Step 7: Create multi-provider load balanced backend (/chat)
-#
-# Both providers are in the same priority group, so AgentGateway uses
-# Power of Two Choices (P2C) to balance requests across them based on
-# health, latency, and pending request count.
+# Step 7: Create the LLM backend
 # ---------------------------------------------------------------------------
 echo ""
-echo "==> Step 7: Creating load balanced backend (OpenAI + Anthropic)..."
+echo "==> Step 7: Creating OpenAI backend (gpt-4o)..."
 
 kubectl apply -f- <<EOF
 apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayBackend
 metadata:
-  name: loadbalanced-backend
+  name: openai-backend
   namespace: ${NAMESPACE}
 spec:
   ai:
     groups:
       - providers:
-          - name: openai-gpt4
+          - name: openai-gpt4o
             openai:
               model: gpt-4o
             policies:
               auth:
                 secretRef:
                   name: openai-secret
-          - name: anthropic-claude
-            anthropic:
-              model: claude-sonnet-4-6
-            policies:
-              auth:
-                secretRef:
-                  name: anthropic-secret
 EOF
 
 # ---------------------------------------------------------------------------
-# Step 8: Create HTTPRoute for /chat -> load balanced backend
+# Step 8: Create the HTTPRoute
 # ---------------------------------------------------------------------------
 echo ""
-echo "==> Step 8: Creating HTTPRoute for /chat (load balanced)..."
+echo "==> Step 8: Creating HTTPRoute for /chat -> OpenAI backend..."
 
 kubectl apply -f- <<EOF
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: loadbalanced-route
+  name: chat-route
   namespace: ${NAMESPACE}
 spec:
   parentRefs:
@@ -197,94 +170,10 @@ spec:
             type: PathPrefix
             value: /chat
       backendRefs:
-        - name: loadbalanced-backend
+        - name: openai-backend
           namespace: ${NAMESPACE}
           group: agentgateway.dev
           kind: AgentgatewayBackend
-EOF
-
-# ---------------------------------------------------------------------------
-# Step 9: Create A/B testing backends
-#
-# Two separate backends with different models:
-#   - stable-backend: gpt-4o (production)
-#   - canary-backend: gpt-4o-mini (candidate for evaluation)
-# ---------------------------------------------------------------------------
-echo ""
-echo "==> Step 9: Creating A/B testing backends (stable + canary)..."
-
-kubectl apply -f- <<EOF
-apiVersion: agentgateway.dev/v1alpha1
-kind: AgentgatewayBackend
-metadata:
-  name: stable-backend
-  namespace: ${NAMESPACE}
-spec:
-  ai:
-    groups:
-      - providers:
-          - name: stable-model
-            openai:
-              model: gpt-4o
-            policies:
-              auth:
-                secretRef:
-                  name: openai-secret
----
-apiVersion: agentgateway.dev/v1alpha1
-kind: AgentgatewayBackend
-metadata:
-  name: canary-backend
-  namespace: ${NAMESPACE}
-spec:
-  ai:
-    groups:
-      - providers:
-          - name: canary-model
-            openai:
-              model: gpt-4o-mini
-            policies:
-              auth:
-                secretRef:
-                  name: openai-secret
-EOF
-
-# ---------------------------------------------------------------------------
-# Step 10: Create HTTPRoute for /test -> A/B split (80/20)
-#
-# Uses Gateway API weighted backendRefs to split traffic:
-#   80% -> stable-backend (gpt-4o)
-#   20% -> canary-backend (gpt-4o-mini)
-# ---------------------------------------------------------------------------
-echo ""
-echo "==> Step 10: Creating HTTPRoute for /test (80/20 A/B split)..."
-
-kubectl apply -f- <<EOF
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: ab-test-route
-  namespace: ${NAMESPACE}
-spec:
-  parentRefs:
-    - name: agentgateway-proxy
-      namespace: ${NAMESPACE}
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /test
-      backendRefs:
-        - name: stable-backend
-          namespace: ${NAMESPACE}
-          group: agentgateway.dev
-          kind: AgentgatewayBackend
-          weight: 80
-        - name: canary-backend
-          namespace: ${NAMESPACE}
-          group: agentgateway.dev
-          kind: AgentgatewayBackend
-          weight: 20
 EOF
 
 # ---------------------------------------------------------------------------
@@ -295,9 +184,8 @@ echo "============================================================"
 echo " Deployment complete!"
 echo "============================================================"
 echo ""
-echo " Endpoints:"
-echo "   /chat  — Load balanced across OpenAI gpt-4o + Anthropic claude-sonnet-4-6"
-echo "   /test  — A/B split: 80% gpt-4o / 20% gpt-4o-mini"
+echo " Endpoint:"
+echo "   /chat  — Proxied to OpenAI gpt-4o"
 echo ""
 echo " To port-forward the gateway:"
 echo "   kubectl port-forward -n ${NAMESPACE} svc/agentgateway-proxy 8080:80"

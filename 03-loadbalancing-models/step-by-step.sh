@@ -13,7 +13,7 @@
 ##############################################################################
 set -euo pipefail
 
-CLUSTER_NAME="agw-series"
+CLUSTER_NAME="agw-loadbalancing"
 NAMESPACE="agentgateway-system"
 AGW_VERSION="v1.0.1"
 GATEWAY_API_VERSION="v1.5.0"

@@ -7,7 +7,7 @@ set -euo pipefail
 # Deletes AgentGateway resources, secrets, and the kind cluster.
 ##############################################################################
 
-CLUSTER_NAME="agw-series"
+CLUSTER_NAME="agw-content-based"
 CLUSTER_CONTEXT="kind-${CLUSTER_NAME}"
 NAMESPACE="agentgateway-system"
 

@@ -2,27 +2,27 @@
 set -euo pipefail
 
 ##############################################################################
-# cleanup.sh — Remove all resources from the Load Balancing Demo
+# cleanup.sh — Remove all resources from the Install AgentGateway demo
 #
 # Deletes AgentGateway resources, secrets, and the kind cluster.
 ##############################################################################
 
-CLUSTER_NAME="agw-loadbalancing"
+CLUSTER_NAME="agw-install"
 NAMESPACE="agentgateway-system"
 
-echo "==> Cleaning up AgentGateway load balancing demo..."
+echo "==> Cleaning up AgentGateway install demo..."
 
 # ---------------------------------------------------------------------------
 # Remove AgentGateway resources
 # ---------------------------------------------------------------------------
 echo ""
-echo "==> Deleting AgentgatewayBackends..."
-kubectl delete AgentgatewayBackend loadbalanced-backend stable-backend canary-backend \
+echo "==> Deleting AgentgatewayBackend..."
+kubectl delete AgentgatewayBackend openai-backend \
   -n "${NAMESPACE}" --ignore-not-found
 
 echo ""
-echo "==> Deleting HTTPRoutes..."
-kubectl delete httproute loadbalanced-route ab-test-route \
+echo "==> Deleting HTTPRoute..."
+kubectl delete httproute chat-route \
   -n "${NAMESPACE}" --ignore-not-found
 
 echo ""
@@ -31,8 +31,8 @@ kubectl delete gateway agentgateway-proxy \
   -n "${NAMESPACE}" --ignore-not-found
 
 echo ""
-echo "==> Deleting Secrets..."
-kubectl delete secret openai-secret anthropic-secret \
+echo "==> Deleting Secret..."
+kubectl delete secret openai-secret \
   -n "${NAMESPACE}" --ignore-not-found
 
 # ---------------------------------------------------------------------------

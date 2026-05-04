@@ -8,7 +8,7 @@ set -euo pipefail
 # and the kind cluster.
 ##############################################################################
 
-CLUSTER_NAME="agw-series"
+CLUSTER_NAME="agw-virtual-keys"
 NAMESPACE="agentgateway-system"
 
 echo "==> Cleaning up AgentGateway virtual keys demo..."
